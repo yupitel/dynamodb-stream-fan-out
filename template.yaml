@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-app
+
+  Sample SAM Template for sam-app
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  DataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput: # set the throughput to 1, since this is just a demo
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  KinesisStream:
+    Type: "AWS::Kinesis::Stream"
+    Properties:
+      ShardCount: 1
+
+  StreamConsumer:
+    Type: "AWS::Kinesis::StreamConsumer"
+    Properties:
+      StreamARN: !GetAtt KinesisStream.Arn
+      ConsumerName: "KinesisConsumer"
+
+  FanOutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: fanout/
+      Handler: app.lambdaHandler
+      Runtime: nodejs10.x
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "kinesis:*"
+              Resource: "*"
+
+  ConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: consumer/
+      Handler: app.lambdaHandler
+      Runtime: nodejs10.x
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "dynamodb:*"
+                - "kinesis:*"
+              Resource: "*"
+
+  StreamToFanOut:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: True
+      EventSourceArn: # trigger event from the data table
+        Fn::GetAtt: [ DataTable , StreamArn ]
+      FunctionName:   # called function
+        Fn::GetAtt: [ FanOutFunction , Arn ]
+      StartingPosition: LATEST #always start at the tail of the stream
+
+  KinesisToConsumer:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: True
+      EventSourceArn: # trigger event from kinesis stream
+        Fn::GetAtt: [ StreamConsumer, ConsumerARN ]
+      FunctionName:   # called function
+        Fn::GetAtt: [ ConsumerFunction, Arn ]
+      StartingPosition: LATEST #always start at the tail of the stream
+
+
+Outputs:
+  FanoutFunction:
+    Description: "FANOUT Lambda Function ARN"
+    Value: !GetAtt FanOutFunction.Arn
+  ConsumerFunction:
+    Description: "Consumer Lambda Function ARN"
+    Value: !GetAtt ConsumerFunction.Arn
+
+  FanOutFunctionIamRole:
+    Description: "Implicit IAM Role created for FANOUT function"
+    Value: !GetAtt FanOutFunctionRole.Arn
+  ConsumerFunctionIamRole:
+    Description: "Implicit IAM Role created for Consumer function"
+    Value: !GetAtt ConsumerFunctionRole.Arn
+
+  StreamARN:
+    Description: "Stream ARN"
+    Value: !GetAtt KinesisStream.Arn
+  ConsumerARN:
+    Description: "Stream consumer ARN"
+    Value: !GetAtt StreamConsumer.ConsumerARN
+
+
+
+    

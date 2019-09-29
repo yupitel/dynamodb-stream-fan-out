@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'sam-app
+
+  Sample SAM Template for sam-app
+
+  '
+Globals:
+  Function:
+    Timeout: 3
+Resources:
+  DataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+  KinesisStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      ShardCount: 1
+  StreamConsumer:
+    Type: AWS::Kinesis::StreamConsumer
+    Properties:
+      StreamARN:
+        Fn::GetAtt:
+        - KinesisStream
+        - Arn
+      ConsumerName: KinesisConsumer
+  FanOutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-cf-test/43915c2393aba0020c22b964a45f6776
+      Handler: app.lambdaHandler
+      Runtime: nodejs10.x
+      Policies:
+      - AWSLambdaBasicExecutionRole
+  ConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-cf-test/2216074f5263d0d69aa819d6e897cb85
+      Handler: app.lambdaHandler
+      Runtime: nodejs10.x
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:*
+          - kinesis:*
+          Resource: '*'
+  StreamToFanOut:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn:
+        Fn::GetAtt:
+        - DataTable
+        - StreamArn
+      FunctionName:
+        Fn::GetAtt:
+        - FanOutFunction
+        - Arn
+      StartingPosition: LATEST
+  KinesisToConsumer:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn:
+        Fn::GetAtt:
+        - StreamConsumer
+        - ConsumerARN
+      FunctionName:
+        Fn::GetAtt:
+        - ConsumerFunction
+        - Arn
+      StartingPosition: LATEST
+Outputs:
+  FanoutFunction:
+    Description: FANOUT Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - FanOutFunction
+      - Arn
+  ConsumerFunction:
+    Description: Consumer Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - ConsumerFunction
+      - Arn
+  FanOutFunctionIamRole:
+    Description: Implicit IAM Role created for FANOUT function
+    Value:
+      Fn::GetAtt:
+      - FanOutFunctionRole
+      - Arn
+  ConsumerFunctionIamRole:
+    Description: Implicit IAM Role created for Consumer function
+    Value:
+      Fn::GetAtt:
+      - ConsumerFunctionRole
+      - Arn
+  StreamARN:
+    Description: Stream ARN
+    Value:
+      Fn::GetAtt:
+      - KinesisStream
+      - Arn
+  ConsumerARN:
+    Description: Stream consumer ARN
+    Value:
+      Fn::GetAtt:
+      - StreamConsumer
+      - ConsumerARN
