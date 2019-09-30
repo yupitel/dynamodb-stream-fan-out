@@ -10,6 +10,12 @@ Globals:
   Function:
     Timeout: 3
 
+Parameters:
+  KinesisName:
+    Type: String
+    Description: Name of kinesis
+    Default: kinesis-for-fanout
+
 Resources:
   DataTable:
     Type: AWS::DynamoDB::Table
@@ -29,6 +35,7 @@ Resources:
   KinesisStream:
     Type: "AWS::Kinesis::Stream"
     Properties:
+      Name: !Ref KinesisName
       ShardCount: 1
 
   StreamConsumer:
@@ -43,12 +50,17 @@ Resources:
       CodeUri: fanout/
       Handler: app.lambdaHandler
       Runtime: nodejs10.x
+      Environment:
+        Variables: 
+          KINESIS_STREAM: !Ref KinesisName
+
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: "2012-10-17"
           Statement:
             - Effect: "Allow"
               Action:
+                - "dynamodb:*"
                 - "kinesis:*"
               Resource: "*"
 
@@ -64,7 +76,6 @@ Resources:
           Statement:
             - Effect: "Allow"
               Action:
-                - "dynamodb:*"
                 - "kinesis:*"
               Resource: "*"
 

@@ -5,8 +5,17 @@ const AWS = require('aws-sdk');
  * 
  */
 exports.lambdaHandler = async (event, context) => {
-  console.log(event);
-  
-  // pass data to kinesis
+  const recs = event.Records;
+  for (let i = 0; i < recs.length; i++) {
+      const rec = recs[i];
+      // convert kinesis data buffer to string
+      const serialized = Buffer.from(rec.kinesis.data, 'base64').toString('ascii');
+      const parsed = JSON.parse(serialized);
+
+      // get dynamodb data
+      const data = parsed.dynamodb.NewImage;
+      console.log(data);
+  }
+
   return event;
 };
